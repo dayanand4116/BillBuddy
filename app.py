@@ -1,6 +1,7 @@
 
 import os
 import re
+import io
 import json
 import sqlite3
 import tempfile
@@ -20,6 +21,7 @@ from flask import (
 from werkzeug.utils import secure_filename
 from google import genai
 from google.genai import types
+from PIL import Image, ImageOps
 
 app = Flask(__name__)
 app.secret_key = os.environ.get(
@@ -72,7 +74,7 @@ def allowed_file(filename):
 
 
 def extract_bill_text(path):
-    """Read a bill image with Gemini and extract its text, amount and due date."""
+    """Resize a bill image and use Gemini to extract its information."""
 
     result = {
         "text": "",
@@ -103,8 +105,24 @@ def extract_bill_text(path):
             )
             return result
 
-        with open(path, "rb") as image_file:
-            image_bytes = image_file.read()
+        # Resize the image to reduce upload size and processing overhead.
+        with Image.open(path) as original:
+            image = ImageOps.exif_transpose(original)
+            image.load()
+
+            image.thumbnail((1800, 1800), Image.Resampling.LANCZOS)
+
+            if image.mode != "RGB":
+                image = image.convert("RGB")
+
+            buffer = io.BytesIO()
+            image.save(
+                buffer,
+                format="JPEG",
+                quality=88,
+                optimize=True,
+            )
+            image_bytes = buffer.getvalue()
 
         client = genai.Client(api_key=api_key)
 
@@ -134,7 +152,7 @@ Instructions:
                 prompt,
                 types.Part.from_bytes(
                     data=image_bytes,
-                    mime_type=mime_type,
+                    mime_type="image/jpeg",
                 ),
             ],
             config=types.GenerateContentConfig(
@@ -152,7 +170,7 @@ Instructions:
         amount_text = str(extracted.get("amount") or "").strip()
         raw_due_date = str(extracted.get("due_date") or "").strip()
 
-        # Validate the extracted amount before showing it.
+        # Validate the extracted amount.
         amount = ""
         if amount_text:
             cleaned_amount = re.sub(r"[₹,\s]", "", amount_text)
@@ -170,7 +188,7 @@ Instructions:
             except (ValueError, TypeError):
                 amount = ""
 
-        # Only accept a valid ISO date.
+        # Validate the extracted due date.
         due_date = ""
         if raw_due_date:
             try:
@@ -201,8 +219,8 @@ Instructions:
     except Exception:
         app.logger.exception("Gemini bill scanning failed")
         result["error"] = (
-            "Gemini could not scan this image. Check your API key, "
-            "API access, model availability, and Vercel logs."
+            "Gemini could not scan this image. Check your API access "
+            "and Vercel logs."
         )
         return result
 
