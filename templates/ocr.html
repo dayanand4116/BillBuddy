@@ -1,0 +1,48 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Scan Bill | BillBuddy</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+<style>
+*{box-sizing:border-box}body{margin:0;background:#f6f7fc;color:#24243d;font-family:Inter,sans-serif}.layout{display:flex;min-height:100vh}.sidebar{width:245px;background:#17172e;padding:28px 18px;color:white;display:flex;flex-direction:column;flex-shrink:0}.brand{font-size:25px;font-weight:800;padding:8px 12px 38px}.brand span{color:#a998ff}.nav-label{font-size:10px;color:#8585a6;letter-spacing:1.5px;padding:0 13px 12px}.nav{display:flex;gap:12px;padding:13px 14px;margin:4px 0;border-radius:12px;color:#b6b6d0;text-decoration:none;font-size:13px;font-weight:600}.nav:hover,.nav.active{background:#302a54;color:white}.bottom{margin-top:auto;background:#242440;padding:17px;border-radius:14px;font-size:12px;color:#c3c1df}.main{padding:38px clamp(18px,4vw,48px);flex:1;min-width:0;max-width:1100px}.eyebrow{font-size:11px;letter-spacing:1.5px;color:#8589a3;font-weight:700}h1{font-size:32px;letter-spacing:-1.2px;margin:8px 0}.sub{font-size:13px;color:#8589a3}.panel{background:white;border:1px solid #ececf4;border-radius:20px;padding:clamp(22px,4vw,38px);margin-top:25px;box-shadow:0 8px 30px #24243d06}.drop{border:2px dashed #d8d0ff;border-radius:16px;background:#faf9ff;padding:38px 20px;text-align:center}.symbol{font-size:42px}.drop strong{display:block;font-size:16px;margin:10px}.drop p{font-size:12px;color:#8589a3}.file{display:block;width:100%;margin-top:20px;padding:14px;border:1px solid #e4e4f0;border-radius:10px;background:white}.btn{border:0;display:inline-block;background:#7655ef;color:white;text-decoration:none;border-radius:11px;padding:14px 20px;font-size:12px;font-weight:700;cursor:pointer;margin-top:18px}.btn:hover{background:#6040df}.flash{padding:13px 15px;background:#fff3df;border-radius:10px;color:#95600c;font-size:12px;margin-top:15px}.result{background:#f9f8ff;border:1px solid #e7e1ff;border-radius:14px;padding:20px;margin-top:22px}.result h2{font-size:18px}.result pre{white-space:pre-wrap;overflow-wrap:anywhere;font:12px/1.7 Inter,sans-serif;color:#41415e;max-height:400px;overflow:auto}.field{margin:12px 0}.hint{font-size:11px;color:#8589a3}@media(max-width:750px){.layout{display:block}.sidebar{width:100%;padding:12px}.brand{padding:5px 8px 12px}.nav-label,.bottom{display:none}.navs{display:flex;overflow:auto}.nav{white-space:nowrap;font-size:11px;padding:10px}.main{padding:24px 14px}}
+</style>
+</head>
+<body><div class="layout">
+<aside class="sidebar">
+<div class="brand">Bill<span>Buddy.</span></div><div class="nav-label">WORKSPACE</div>
+<nav class="navs">
+<a class="nav" href="{{ url_for('dashboard') }}">▦ Dashboard</a>
+<a class="nav" href="{{ url_for('add_bill') }}">＋ Add a bill</a>
+<a class="nav active" href="{{ url_for('ocr') }}">▧ Scan a bill</a>
+<a class="nav" href="{{ url_for('subscriptions') }}">↻ Subscriptions</a>
+</nav>
+<div class="bottom"><b>Smart bill scanning</b><br>Extract text from an image and verify it before using.</div>
+</aside>
+<main class="main">
+<div class="eyebrow">SMART DOCUMENT SCANNER</div><h1>Scan a bill ✨</h1><p class="sub">Upload a clear bill image to attempt text and amount extraction.</p>
+<div class="panel">
+<form method="post" enctype="multipart/form-data">
+<div class="drop"><div class="symbol">▧</div><strong>Upload your bill image</strong><p>PNG, JPG, JPEG or WEBP · Clear, readable images work best.</p>
+<input class="file" type="file" name="bill_image" accept=".png,.jpg,.jpeg,.webp" required>
+<button class="btn" type="submit">Scan image →</button></div>
+</form>
+{% with messages = get_flashed_messages(with_categories=true) %}
+{% for category, message in messages %}<div class="flash">{{ message }}</div>{% endfor %}
+{% endwith %}
+{% if result %}
+<div class="result"><h2>Scan results</h2><p class="hint">File: {{ result.filename }}</p>
+{% if result.amount %}<div class="field"><b>Detected amount:</b> ₹{{ result.amount }}</div>{% endif %}
+{% if result.due_date %}<div class="field"><b>Detected date:</b> {{ result.due_date }}</div>{% endif %}
+<h3>Extracted text</h3>
+{% if result.text %}<pre>{{ result.text }}</pre>{% else %}<p>No text was extracted. Try a clearer image or enter the details manually.</p>{% endif %}
+{% if result.error %}<p>{{ result.error }}</p>{% endif %}
+<a class="btn" href="{{ url_for('add_bill') }}">Enter bill details →</a>
+</div>
+{% endif %}
+</div>
+<p class="hint">OCR may misread details. Always verify the amount and date against your original bill.</p>
+</main></div></body></html>
