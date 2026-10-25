@@ -263,7 +263,7 @@ def ocr():
     result = None
 
     if request.method == "POST":
-        file = request.files.get("bill_image")
+        file = request.files.get("file")
 
         if not file or not file.filename:
             flash("Choose a bill image first.", "danger")
