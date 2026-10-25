@@ -5,6 +5,7 @@ import sqlite3
 import tempfile
 from datetime import date, datetime
 from pathlib import Path
+from math import isfinite
 
 from flask import (
     Flask,
@@ -19,20 +20,21 @@ from werkzeug.utils import secure_filename
 app = Flask(__name__)
 app.secret_key = os.environ.get(
     "SECRET_KEY",
-    "change-this-secret-key-before-production"
+    "change-this-secret-key-before-production",
 )
 
-# Writable temporary storage on Vercel
+# Vercel serverless functions have writable temporary storage at /tmp.
 DATA_DIR = "/tmp"
 UPLOAD_DIR = os.path.join(DATA_DIR, "uploads")
 os.makedirs(UPLOAD_DIR, exist_ok=True)
 
 DB_PATH = os.environ.get(
     "DATABASE_PATH",
-    os.path.join(DATA_DIR, "billbuddy.db")
+    os.path.join(DATA_DIR, "billbuddy.db"),
 )
 
 ALLOWED_EXTENSIONS = {"png", "jpg", "jpeg", "webp"}
+MAX_UPLOAD_BYTES = 10 * 1024 * 1024  # 10 MB
 
 
 def get_db():
@@ -66,70 +68,138 @@ def allowed_file(filename):
 
 
 def extract_bill_text(path):
-    """Extract bill text when Tesseract and OCR packages are available."""
+    """
+    Extract text from an uploaded image using Tesseract OCR.
+
+    Requires:
+      - Pillow
+      - pytesseract
+      - The Tesseract OCR engine installed on the machine.
+    """
+    result = {
+        "text": "",
+        "amount": "",
+        "due_date": "",
+        "error": "",
+    }
+
     try:
         import pytesseract
-        from PIL import Image
+        from PIL import Image, ImageOps, ImageEnhance
 
-        # Do not configure a Windows-specific Tesseract path on Vercel.
-        with Image.open(path) as image:
-            text = pytesseract.image_to_string(image)
+        # Allow an explicitly configured Tesseract executable path.
+        # On Vercel, setting this variable alone does not install Tesseract.
+        tesseract_cmd = os.environ.get("TESSERACT_CMD")
+        if tesseract_cmd:
+            pytesseract.pytesseract.tesseract_cmd = tesseract_cmd
 
-        amount_match = re.search(
-            r"(?:₹|Rs\.?|INR)\s*([0-9,]+(?:\.[0-9]{1,2})?)",
-            text,
-            re.IGNORECASE,
-        )
+        with Image.open(path) as original:
+            original.verify()
 
-        date_match = re.search(
+        with Image.open(path) as original:
+            image = ImageOps.exif_transpose(original).convert("RGB")
+
+            # Improve contrast for some scanned or photographed bills.
+            image = ImageOps.grayscale(image)
+            image = ImageEnhance.Contrast(image).enhance(1.5)
+
+            text = pytesseract.image_to_string(
+                image,
+                config="--psm 6",
+            ).strip()
+
+        app.logger.info("OCR completed; extracted %s characters", len(text))
+
+        if not text:
+            result["error"] = (
+                "No readable text was found. Try a clearer, well-lit "
+                "image or enter the bill details manually."
+            )
+            return result
+
+        # Find common Indian currency formats, for example:
+        # ₹1,250.00, Rs. 1250, INR 1250
+        amount_patterns = [
+            r"(?:₹|Rs\.?|INR)\s*([0-9][0-9,]*(?:\.[0-9]{1,2})?)",
+            r"(?:total|amount\s*due|grand\s*total|bill\s*amount)"
+            r"\s*[:\-]?\s*(?:₹|Rs\.?|INR)?\s*"
+            r"([0-9][0-9,]*(?:\.[0-9]{1,2})?)",
+        ]
+
+        amount = ""
+        for pattern in amount_patterns:
+            match = re.search(pattern, text, re.IGNORECASE)
+            if match:
+                amount = match.group(1).replace(",", "")
+                break
+
+        # Recognize common year-first and day-first date formats.
+        date_patterns = [
             r"\b(20\d{2}[-/]\d{1,2}[-/]\d{1,2})\b",
-            text,
-        )
-
-        amount = (
-            amount_match.group(1).replace(",", "")
-            if amount_match else ""
-        )
+            r"\b(\d{1,2}[-/]\d{1,2}[-/]20\d{2})\b",
+        ]
 
         due_date = ""
-        if date_match:
-            raw_date = date_match.group(1).replace("/", "-")
-            try:
-                due_date = datetime.strptime(
-                    raw_date, "%Y-%m-%d"
-                ).date().isoformat()
-            except ValueError:
-                pass
+        for pattern in date_patterns:
+            match = re.search(pattern, text)
+            if not match:
+                continue
 
-        return {
+            raw_date = match.group(1).replace("/", "-")
+            parsed_date = None
+
+            for fmt in ("%Y-%m-%d", "%d-%m-%Y", "%m-%d-%Y"):
+                try:
+                    parsed_date = datetime.strptime(
+                        raw_date, fmt
+                    ).date()
+                    break
+                except ValueError:
+                    continue
+
+            if parsed_date:
+                due_date = parsed_date.isoformat()
+                break
+
+        result.update({
             "text": text[:4000],
             "amount": amount,
             "due_date": due_date,
-            "error": "",
-        }
+        })
+
+        return result
 
     except ImportError:
-        return {
-            "text": "",
-            "amount": "",
-            "due_date": "",
-            "error": (
-                "OCR packages are unavailable. You can still enter "
-                "bill details manually."
-            ),
-        }
+        app.logger.exception("OCR dependency is missing")
+        result["error"] = (
+            "An OCR Python package is missing. Install Pillow and "
+            "pytesseract, then restart the application."
+        )
+        return result
 
     except Exception as exc:
         app.logger.exception("OCR processing failed")
-        return {
-            "text": "",
-            "amount": "",
-            "due_date": "",
-            "error": (
-                "OCR could not read this image. Tesseract may not be "
-                f"installed or configured. Details: {exc}"
-            ),
-        }
+
+        error_name = type(exc).__name__
+        error_message = str(exc)
+
+        if (
+            error_name == "TesseractNotFoundError"
+            or "tesseract is not installed" in error_message.lower()
+        ):
+            result["error"] = (
+                "The Tesseract OCR engine is not installed or cannot "
+                "be found. Installing pytesseract alone is not enough. "
+                "On Vercel, configure a compatible OCR engine or use "
+                "an external OCR API."
+            )
+        else:
+            result["error"] = (
+                f"Could not scan this image ({error_name}). "
+                "Check the Flask terminal logs for details."
+            )
+
+        return result
 
 
 @app.route("/")
@@ -145,26 +215,22 @@ def dashboard():
             "SELECT COALESCE(SUM(amount), 0) FROM bills"
         ).fetchone()[0]
 
-        pending = db.execute(
-            """
+        pending = db.execute("""
             SELECT COALESCE(SUM(amount), 0)
-            FROM bills WHERE status = 'Pending'
-            """
-        ).fetchone()[0]
+            FROM bills
+            WHERE status = 'Pending'
+        """).fetchone()[0]
 
-        paid_count = db.execute(
-            "SELECT COUNT(*) FROM bills WHERE status = 'Paid'"
-        ).fetchone()[0]
+        paid_count = db.execute("""
+            SELECT COUNT(*) FROM bills WHERE status = 'Paid'
+        """).fetchone()[0]
 
-        upcoming = db.execute(
-            """
+        upcoming = db.execute("""
             SELECT COUNT(*) FROM bills
             WHERE status = 'Pending'
               AND due_date >= ?
               AND due_date <= date(?, '+7 days')
-            """,
-            (today, today),
-        ).fetchone()[0]
+        """, (today, today)).fetchone()[0]
 
     return render_template(
         "index.html",
@@ -195,9 +261,9 @@ def add_bill():
 
         try:
             amount = float(amount_text)
-            if not 0 <= amount < float("inf"):
+            if not isfinite(amount) or amount < 0:
                 raise ValueError
-        except ValueError:
+        except (ValueError, TypeError):
             flash(
                 "Amount must be a valid non-negative number.",
                 "danger",
@@ -207,15 +273,15 @@ def add_bill():
             )
 
         with get_db() as db:
-            db.execute(
-                """
+            db.execute("""
                 INSERT INTO bills
                 (title, category, amount, due_date,
                  recurring, status, notes)
                 VALUES (?, ?, ?, ?, ?, 'Pending', ?)
-                """,
-                (title, category, amount, due_date, recurring, notes),
-            )
+            """, (
+                title, category, amount, due_date,
+                recurring, notes,
+            ))
 
         flash("Bill added successfully.", "success")
         return redirect(url_for("dashboard"))
@@ -263,7 +329,11 @@ def ocr():
     result = None
 
     if request.method == "POST":
-        file = request.files.get("file")
+        # Support either input name so HTML/backend stay compatible.
+        file = (
+            request.files.get("file")
+            or request.files.get("bill_image")
+        )
 
         if not file or not file.filename:
             flash("Choose a bill image first.", "danger")
@@ -280,6 +350,7 @@ def ocr():
             path = None
 
             try:
+                # Save to a unique temporary filename to avoid collisions.
                 with tempfile.NamedTemporaryFile(
                     prefix="bill_",
                     suffix=suffix,
@@ -289,27 +360,41 @@ def ocr():
                     path = temp_file.name
 
                 file.save(path)
-                result = extract_bill_text(path)
-                result["filename"] = filename
+
+                if os.path.getsize(path) > MAX_UPLOAD_BYTES:
+                    result = {
+                        "filename": filename,
+                        "text": "",
+                        "amount": "",
+                        "due_date": "",
+                        "error": "Image is too large. Maximum size is 10 MB.",
+                    }
+                else:
+                    result = extract_bill_text(path)
+                    result["filename"] = filename
 
                 if result.get("error"):
                     flash(result["error"], "warning")
-                elif not result.get("text"):
-                    flash(
-                        "No readable text found. Try a clearer image.",
-                        "warning",
-                    )
 
             except Exception:
                 app.logger.exception("Upload processing failed")
-                flash("Could not process the uploaded image.", "danger")
+                result = {
+                    "filename": filename,
+                    "text": "",
+                    "amount": "",
+                    "due_date": "",
+                    "error": "Could not process the uploaded image.",
+                }
+                flash(result["error"], "danger")
 
             finally:
                 if path and os.path.exists(path):
                     try:
                         os.remove(path)
                     except OSError:
-                        pass
+                        app.logger.warning(
+                            "Could not remove temporary image: %s", path
+                        )
 
     return render_template("ocr.html", result=result)
 
@@ -317,18 +402,16 @@ def ocr():
 @app.route("/subscriptions")
 def subscriptions():
     with get_db() as db:
-        rows = db.execute(
-            """
+        rows = db.execute("""
             SELECT * FROM bills
             WHERE recurring = 'Yes'
             ORDER BY due_date
-            """
-        ).fetchall()
+        """).fetchall()
 
     return render_template("subscriptions.html", bills=rows)
 
 
-# Create the table when Vercel imports the application.
+# Initialize the database table when the app starts.
 try:
     init_db()
 except Exception:
