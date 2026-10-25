@@ -1,8 +1,10 @@
 
 import os
 import re
+import json
 import sqlite3
 import tempfile
+import mimetypes
 from datetime import date, datetime
 from pathlib import Path
 from math import isfinite
@@ -16,6 +18,8 @@ from flask import (
     flash,
 )
 from werkzeug.utils import secure_filename
+from google import genai
+from google.genai import types
 
 app = Flask(__name__)
 app.secret_key = os.environ.get(
@@ -23,7 +27,7 @@ app.secret_key = os.environ.get(
     "change-this-secret-key-before-production",
 )
 
-# Vercel serverless functions have writable temporary storage at /tmp.
+# Temporary storage for Vercel serverless functions.
 DATA_DIR = "/tmp"
 UPLOAD_DIR = os.path.join(DATA_DIR, "uploads")
 os.makedirs(UPLOAD_DIR, exist_ok=True)
@@ -68,14 +72,8 @@ def allowed_file(filename):
 
 
 def extract_bill_text(path):
-    """
-    Extract text from an uploaded image using Tesseract OCR.
+    """Read a bill image with Gemini and extract its text, amount and due date."""
 
-    Requires:
-      - Pillow
-      - pytesseract
-      - The Tesseract OCR engine installed on the machine.
-    """
     result = {
         "text": "",
         "amount": "",
@@ -83,122 +81,129 @@ def extract_bill_text(path):
         "error": "",
     }
 
+    api_key = os.environ.get("GEMINI_API_KEY")
+
+    if not api_key:
+        result["error"] = (
+            "Gemini API key is missing. Add GEMINI_API_KEY "
+            "in your Vercel project environment variables."
+        )
+        return result
+
     try:
-        import pytesseract
-        from PIL import Image, ImageOps, ImageEnhance
+        mime_type, _ = mimetypes.guess_type(path)
 
-        # Allow an explicitly configured Tesseract executable path.
-        # On Vercel, setting this variable alone does not install Tesseract.
-        tesseract_cmd = os.environ.get("TESSERACT_CMD")
-        if tesseract_cmd:
-            pytesseract.pytesseract.tesseract_cmd = tesseract_cmd
-
-        with Image.open(path) as original:
-            original.verify()
-
-        with Image.open(path) as original:
-            image = ImageOps.exif_transpose(original).convert("RGB")
-
-            # Improve contrast for some scanned or photographed bills.
-            image = ImageOps.grayscale(image)
-            image = ImageEnhance.Contrast(image).enhance(1.5)
-
-            text = pytesseract.image_to_string(
-                image,
-                config="--psm 6",
-            ).strip()
-
-        app.logger.info("OCR completed; extracted %s characters", len(text))
-
-        if not text:
+        if mime_type not in {
+            "image/png",
+            "image/jpeg",
+            "image/webp",
+        }:
             result["error"] = (
-                "No readable text was found. Try a clearer, well-lit "
-                "image or enter the bill details manually."
+                "Unsupported image format. Upload PNG, JPG, JPEG or WEBP."
             )
             return result
 
-        # Find common Indian currency formats, for example:
-        # ₹1,250.00, Rs. 1250, INR 1250
-        amount_patterns = [
-            r"(?:₹|Rs\.?|INR)\s*([0-9][0-9,]*(?:\.[0-9]{1,2})?)",
-            r"(?:total|amount\s*due|grand\s*total|bill\s*amount)"
-            r"\s*[:\-]?\s*(?:₹|Rs\.?|INR)?\s*"
-            r"([0-9][0-9,]*(?:\.[0-9]{1,2})?)",
-        ]
+        with open(path, "rb") as image_file:
+            image_bytes = image_file.read()
 
+        client = genai.Client(api_key=api_key)
+
+        prompt = """
+You are helping extract information from a bill or invoice.
+
+Read the image and return ONLY a valid JSON object with these keys:
+{
+  "text": "all readable bill text",
+  "amount": "final payable amount as a number, or empty string",
+  "due_date": "due date in YYYY-MM-DD format, or empty string"
+}
+
+Instructions:
+- Extract the final amount payable, total due, or grand total.
+- Do not use a subtotal or tax amount if a final total is visible.
+- Extract the due date, not the bill issue date.
+- If the due date is unclear or absent, return an empty string.
+- Never invent missing information.
+- Keep the extracted text concise enough to fit in the response.
+- Return valid JSON only, without Markdown fences.
+"""
+
+        response = client.models.generate_content(
+            model="gemini-2.5-flash",
+            contents=[
+                prompt,
+                types.Part.from_bytes(
+                    data=image_bytes,
+                    mime_type=mime_type,
+                ),
+            ],
+            config=types.GenerateContentConfig(
+                response_mime_type="application/json",
+                temperature=0,
+            ),
+        )
+
+        if not response.text:
+            raise ValueError("Gemini returned an empty response.")
+
+        extracted = json.loads(response.text)
+
+        text = str(extracted.get("text") or "").strip()[:4000]
+        amount_text = str(extracted.get("amount") or "").strip()
+        raw_due_date = str(extracted.get("due_date") or "").strip()
+
+        # Validate the extracted amount before showing it.
         amount = ""
-        for pattern in amount_patterns:
-            match = re.search(pattern, text, re.IGNORECASE)
-            if match:
-                amount = match.group(1).replace(",", "")
-                break
+        if amount_text:
+            cleaned_amount = re.sub(r"[₹,\s]", "", amount_text)
+            cleaned_amount = re.sub(
+                r"^(?:INR|Rs\.?)",
+                "",
+                cleaned_amount,
+                flags=re.IGNORECASE,
+            )
 
-        # Recognize common year-first and day-first date formats.
-        date_patterns = [
-            r"\b(20\d{2}[-/]\d{1,2}[-/]\d{1,2})\b",
-            r"\b(\d{1,2}[-/]\d{1,2}[-/]20\d{2})\b",
-        ]
+            try:
+                parsed_amount = float(cleaned_amount)
+                if isfinite(parsed_amount) and parsed_amount >= 0:
+                    amount = str(parsed_amount)
+            except (ValueError, TypeError):
+                amount = ""
 
+        # Only accept a valid ISO date.
         due_date = ""
-        for pattern in date_patterns:
-            match = re.search(pattern, text)
-            if not match:
-                continue
-
-            raw_date = match.group(1).replace("/", "-")
-            parsed_date = None
-
-            for fmt in ("%Y-%m-%d", "%d-%m-%Y", "%m-%d-%Y"):
-                try:
-                    parsed_date = datetime.strptime(
-                        raw_date, fmt
-                    ).date()
-                    break
-                except ValueError:
-                    continue
-
-            if parsed_date:
-                due_date = parsed_date.isoformat()
-                break
+        if raw_due_date:
+            try:
+                due_date = datetime.strptime(
+                    raw_due_date, "%Y-%m-%d"
+                ).date().isoformat()
+            except ValueError:
+                due_date = ""
 
         result.update({
-            "text": text[:4000],
+            "text": text,
             "amount": amount,
             "due_date": due_date,
         })
 
-        return result
+        if not text:
+            result["error"] = (
+                "No readable text was detected. Try a clearer bill image."
+            )
 
-    except ImportError:
-        app.logger.exception("OCR dependency is missing")
-        result["error"] = (
-            "An OCR Python package is missing. Install Pillow and "
-            "pytesseract, then restart the application."
+        app.logger.info(
+            "Gemini scan completed; extracted %s characters",
+            len(text),
         )
+
         return result
 
-    except Exception as exc:
-        app.logger.exception("OCR processing failed")
-
-        error_name = type(exc).__name__
-        error_message = str(exc)
-
-        if (
-            error_name == "TesseractNotFoundError"
-            or "tesseract is not installed" in error_message.lower()
-        ):
-            result["error"] = (
-                "The Tesseract OCR engine is not installed or cannot "
-                "be found. Installing pytesseract alone is not enough. "
-                "On Vercel, configure a compatible OCR engine or use "
-                "an external OCR API."
-            )
-        else:
-            result["error"] = (
-                f"Could not scan this image ({error_name}). "
-                "Check the Flask terminal logs for details."
-            )
-
+    except Exception:
+        app.logger.exception("Gemini bill scanning failed")
+        result["error"] = (
+            "Gemini could not scan this image. Check your API key, "
+            "API access, model availability, and Vercel logs."
+        )
         return result
 
 
@@ -329,7 +334,6 @@ def ocr():
     result = None
 
     if request.method == "POST":
-        # Support either input name so HTML/backend stay compatible.
         file = (
             request.files.get("file")
             or request.files.get("bill_image")
@@ -350,7 +354,6 @@ def ocr():
             path = None
 
             try:
-                # Save to a unique temporary filename to avoid collisions.
                 with tempfile.NamedTemporaryFile(
                     prefix="bill_",
                     suffix=suffix,
@@ -367,7 +370,9 @@ def ocr():
                         "text": "",
                         "amount": "",
                         "due_date": "",
-                        "error": "Image is too large. Maximum size is 10 MB.",
+                        "error": (
+                            "Image is too large. Maximum size is 10 MB."
+                        ),
                     }
                 else:
                     result = extract_bill_text(path)
@@ -411,7 +416,6 @@ def subscriptions():
     return render_template("subscriptions.html", bills=rows)
 
 
-# Initialize the database table when the app starts.
 try:
     init_db()
 except Exception:
