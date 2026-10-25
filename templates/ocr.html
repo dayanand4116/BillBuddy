@@ -1,64 +1,438 @@
-
+```html
 <!DOCTYPE html>
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Scan Bill | BillBuddy</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Scan a Bill | BillBuddy</title>
+
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+
 <style>
-*{box-sizing:border-box}body{margin:0;background:#f6f7fc;color:#24243d;font-family:Inter,sans-serif}.layout {
+* {
+    box-sizing: border-box;
+}
+
+body {
+    margin: 0;
+    padding: 0;
+    background: #f6f7fc;
+    color: #24243d;
+    font-family: Inter, sans-serif;
+}
+
+/* PAGE LAYOUT */
+.layout {
     display: flex;
+    align-items: stretch;
     min-height: 100vh;
+    width: 100%;
     margin: 0;
     padding: 0;
 }
-    .sidebar {
+
+/* LEFT SIDEBAR */
+.sidebar {
     width: 245px;
     min-width: 245px;
-    flex-shrink: 0;
+    flex: 0 0 245px;
     background: #17172e;
     color: white;
     padding: 28px 18px;
     display: flex;
     flex-direction: column;
     margin: 0;
-}.brand{font-size:25px;font-weight:800;padding:8px 12px 38px}.brand span{color:#a998ff}.nav-label{font-size:10px;color:#8585a6;letter-spacing:1.5px;padding:0 13px 12px}.nav{display:flex;gap:12px;padding:13px 14px;margin:4px 0;border-radius:12px;color:#b6b6d0;text-decoration:none;font-size:13px;font-weight:600}.nav:hover,.nav.active{background:#302a54;color:white}.bottom{margin-top:auto;background:#242440;padding:17px;border-radius:14px;font-size:12px;color:#c3c1df}.main{padding:38px clamp(18px,4vw,48px);flex:1;min-width:0;max-width:1100px}.eyebrow{font-size:11px;letter-spacing:1.5px;color:#8589a3;font-weight:700}h1{font-size:32px;letter-spacing:-1.2px;margin:8px 0}.sub{font-size:13px;color:#8589a3}.panel{background:white;border:1px solid #ececf4;border-radius:20px;padding:clamp(22px,4vw,38px);margin-top:25px;box-shadow:0 8px 30px #24243d06}.drop{border:2px dashed #d8d0ff;border-radius:16px;background:#faf9ff;padding:38px 20px;text-align:center}.symbol{font-size:42px}.drop strong{display:block;font-size:16px;margin:10px}.drop p{font-size:12px;color:#8589a3}.file{display:block;width:100%;margin-top:20px;padding:14px;border:1px solid #e4e4f0;border-radius:10px;background:white}.btn{border:0;display:inline-block;background:#7655ef;color:white;text-decoration:none;border-radius:11px;padding:14px 20px;font-size:12px;font-weight:700;cursor:pointer;margin-top:18px}.btn:hover{background:#6040df}.flash{padding:13px 15px;background:#fff3df;border-radius:10px;color:#95600c;font-size:12px;margin-top:15px}.result{background:#f9f8ff;border:1px solid #e7e1ff;border-radius:14px;padding:20px;margin-top:22px}.result h2{font-size:18px}.result pre{white-space:pre-wrap;overflow-wrap:anywhere;font:12px/1.7 Inter,sans-serif;color:#41415e;max-height:400px;overflow:auto}.field{margin:12px 0}.hint{font-size:11px;color:#8589a3}@media(max-width:750px){.layout{display:block}.sidebar{width:100%;padding:12px}.brand{padding:5px 8px 12px}.nav-label,.bottom{display:none}.navs{display:flex;overflow:auto}.nav{white-space:nowrap;font-size:11px;padding:10px}.main{padding:24px 14px}}
+}
+
+.brand {
+    font-size: 25px;
+    font-weight: 800;
+    letter-spacing: -1px;
+    padding: 8px 12px 38px;
+}
+
+.brand span {
+    color: #a998ff;
+}
+
+.nav-label {
+    font-size: 10px;
+    color: #8585a6;
+    font-weight: 800;
+    letter-spacing: 1.5px;
+    padding: 0 13px;
+    margin-bottom: 12px;
+}
+
+.navs {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.nav {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 13px 14px;
+    border-radius: 12px;
+    color: #b6b6d0;
+    text-decoration: none;
+    font-size: 13px;
+    font-weight: 600;
+    white-space: nowrap;
+}
+
+.nav:hover,
+.nav.active {
+    background: #302a54;
+    color: white;
+}
+
+.bottom {
+    margin-top: auto;
+    background: #242440;
+    padding: 17px;
+    border-radius: 14px;
+    font-size: 12px;
+    color: #c3c1df;
+    line-height: 1.6;
+}
+
+/* RIGHT CONTENT */
+.main {
+    flex: 1 1 0;
+    min-width: 0;
+    padding: 38px clamp(18px, 4vw, 48px);
+    margin: 0;
+}
+
+.eyebrow {
+    font-size: 11px;
+    letter-spacing: 1.5px;
+    color: #8589a3;
+    font-weight: 700;
+}
+
+h1 {
+    font-size: 32px;
+    letter-spacing: -1.2px;
+    margin: 8px 0;
+}
+
+.subtitle {
+    font-size: 13px;
+    line-height: 1.7;
+    color: #8589a3;
+    margin: 8px 0 0;
+}
+
+.page-header {
+    margin-bottom: 28px;
+}
+
+/* SCAN PANEL */
+.scan-panel {
+    background: white;
+    border: 1px solid #ececf4;
+    border-radius: 18px;
+    padding: 28px;
+    box-shadow: 0 5px 20px #24243d05;
+    max-width: 850px;
+}
+
+.panel-title {
+    font-size: 18px;
+    font-weight: 800;
+    margin: 0 0 8px;
+}
+
+.panel-description {
+    font-size: 13px;
+    color: #8589a3;
+    line-height: 1.7;
+    margin: 0 0 22px;
+}
+
+.upload-area {
+    border: 2px dashed #d9d3fa;
+    background: #faf9ff;
+    border-radius: 15px;
+    padding: 35px 20px;
+    text-align: center;
+}
+
+.upload-icon {
+    width: 58px;
+    height: 58px;
+    margin: 0 auto 15px;
+    display: grid;
+    place-items: center;
+    background: #f0edff;
+    color: #7655ef;
+    border-radius: 16px;
+    font-size: 28px;
+}
+
+.upload-title {
+    font-size: 15px;
+    font-weight: 800;
+    margin-bottom: 8px;
+}
+
+.upload-help {
+    color: #8589a3;
+    font-size: 12px;
+    line-height: 1.7;
+    margin-bottom: 20px;
+}
+
+.file-input {
+    display: block;
+    width: 100%;
+    max-width: 420px;
+    margin: 0 auto 18px;
+    padding: 12px;
+    border: 1px solid #e4e3ef;
+    border-radius: 10px;
+    background: white;
+    color: #555570;
+    font: inherit;
+    font-size: 12px;
+}
+
+.btn {
+    display: inline-block;
+    border: 0;
+    background: #7655ef;
+    color: white;
+    text-decoration: none;
+    border-radius: 11px;
+    padding: 12px 18px;
+    font-family: inherit;
+    font-size: 12px;
+    font-weight: 700;
+    cursor: pointer;
+}
+
+.btn:hover {
+    background: #6242dc;
+}
+
+.btn:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+}
+
+.notice {
+    margin-top: 20px;
+    background: #f6f4ff;
+    border: 1px solid #e8e2ff;
+    border-radius: 12px;
+    padding: 15px 17px;
+    color: #62558e;
+    font-size: 12px;
+    line-height: 1.7;
+}
+
+.result-panel {
+    margin-top: 24px;
+    padding: 22px;
+    border: 1px solid #ececf4;
+    border-radius: 16px;
+    background: white;
+    overflow-wrap: anywhere;
+}
+
+.result-title {
+    font-size: 16px;
+    font-weight: 800;
+    margin: 0 0 14px;
+}
+
+.result-content {
+    color: #555570;
+    font-size: 13px;
+    line-height: 1.8;
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+}
+
+.error {
+    color: #c0394b;
+    background: #fff0f1;
+    border: 1px solid #ffdadd;
+    border-radius: 10px;
+    padding: 13px;
+    font-size: 13px;
+    margin-bottom: 18px;
+}
+
+@media (max-width: 750px) {
+    .layout {
+        display: block;
+    }
+
+    .sidebar {
+        width: 100%;
+        min-width: 0;
+        flex: none;
+        padding: 12px;
+    }
+
+    .brand {
+        padding: 5px 8px 12px;
+    }
+
+    .nav-label,
+    .bottom {
+        display: none;
+    }
+
+    .navs {
+        display: flex;
+        flex-direction: row;
+        gap: 4px;
+        overflow-x: auto;
+    }
+
+    .nav {
+        flex: 0 0 auto;
+        padding: 10px;
+        font-size: 11px;
+    }
+
+    .main {
+        width: 100%;
+        padding: 24px 14px;
+    }
+
+    h1 {
+        font-size: 27px;
+    }
+
+    .scan-panel {
+        padding: 18px;
+    }
+
+    .upload-area {
+        padding: 25px 12px;
+    }
+}
 </style>
 </head>
-<body><div class="layout">
-<aside class="sidebar">
-<div class="brand">Bill<span>Buddy.</span></div><div class="nav-label">WORKSPACE</div>
-<nav class="navs">
-<a class="nav" href="{{ url_for('dashboard') }}">▦ Dashboard</a>
-<a class="nav" href="{{ url_for('add_bill') }}">＋ Add a bill</a>
-<a class="nav active" href="{{ url_for('ocr') }}">▧ Scan a bill</a>
-<a class="nav" href="{{ url_for('subscriptions') }}">↻ Subscriptions</a>
-</nav>
-<div class="bottom"><b>Smart bill scanning</b><br>Extract text from an image and verify it before using.</div>
-</aside>
-<main class="main">
-<div class="eyebrow">SMART DOCUMENT SCANNER</div><h1>Scan a bill ✨</h1><p class="sub">Upload a clear bill image to attempt text and amount extraction.</p>
-<div class="panel">
-<form method="post" enctype="multipart/form-data">
-<div class="drop"><div class="symbol">▧</div><strong>Upload your bill image</strong><p>PNG, JPG, JPEG or WEBP · Clear, readable images work best.</p>
-<input class="file" type="file" name="bill_image" accept=".png,.jpg,.jpeg,.webp" required>
-<button class="btn" type="submit">Scan image →</button></div>
-</form>
-{% with messages = get_flashed_messages(with_categories=true) %}
-{% for category, message in messages %}<div class="flash">{{ message }}</div>{% endfor %}
-{% endwith %}
-{% if result %}
-<div class="result"><h2>Scan results</h2><p class="hint">File: {{ result.filename }}</p>
-{% if result.amount %}<div class="field"><b>Detected amount:</b> ₹{{ result.amount }}</div>{% endif %}
-{% if result.due_date %}<div class="field"><b>Detected date:</b> {{ result.due_date }}</div>{% endif %}
-<h3>Extracted text</h3>
-{% if result.text %}<pre>{{ result.text }}</pre>{% else %}<p>No text was extracted. Try a clearer image or enter the details manually.</p>{% endif %}
-{% if result.error %}<p>{{ result.error }}</p>{% endif %}
-<a class="btn" href="{{ url_for('add_bill') }}">Enter bill details →</a>
+
+<body>
+
+<div class="layout">
+
+    <!-- LEFT SIDEBAR -->
+    <aside class="sidebar">
+        <div class="brand">Bill<span>Buddy.</span></div>
+
+        <div class="nav-label">WORKSPACE</div>
+
+        <nav class="navs">
+            <a class="nav" href="{{ url_for('dashboard') }}">
+                ▦ Dashboard
+            </a>
+
+            <a class="nav" href="{{ url_for('add_bill') }}">
+                ＋ Add a bill
+            </a>
+
+            <a class="nav active" href="{{ url_for('ocr') }}">
+                ▧ Scan a bill
+            </a>
+
+            <a class="nav" href="{{ url_for('subscriptions') }}">
+                ↻ Subscriptions
+            </a>
+        </nav>
+
+        <div class="bottom">
+            <b>Stay in control</b><br>
+            Keep track of your bills with ease.
+        </div>
+    </aside>
+
+    <!-- RIGHT CONTENT -->
+    <main class="main">
+
+        <div class="page-header">
+            <div class="eyebrow">SMART BILL SCANNER</div>
+            <h1>Scan a bill</h1>
+            <p class="subtitle">
+                Upload a bill image and extract its details to help manage your expenses.
+            </p>
+        </div>
+
+        <section class="scan-panel">
+            <h2 class="panel-title">Upload your bill</h2>
+
+            <p class="panel-description">
+                Select a clear image of your bill. Make sure the text and amount are readable.
+            </p>
+
+            {% if error %}
+            <div class="error">{{ error }}</div>
+            {% endif %}
+
+            <form method="POST"
+                  action="{{ url_for('ocr') }}"
+                  enctype="multipart/form-data">
+
+                <div class="upload-area">
+                    <div class="upload-icon">▧</div>
+
+                    <div class="upload-title">
+                        Choose a bill image
+                    </div>
+
+                    <div class="upload-help">
+                        Select an image from your device to scan.
+                    </div>
+
+                    <input
+                        class="file-input"
+                        type="file"
+                        name="file"
+                        accept="image/*"
+                        required
+                    >
+
+                    <button class="btn" type="submit">
+                        Scan bill
+                    </button>
+                </div>
+            </form>
+
+            <div class="notice">
+                <strong>Tip:</strong>
+                Use a clear, well-lit image with the bill total and date visible.
+                Check the extracted details before using them.
+            </div>
+        </section>
+
+        {% if result %}
+        <section class="result-panel">
+            <h2 class="result-title">Scan result</h2>
+
+            <div class="result-content">{{ result }}</div>
+
+            <div style="margin-top:18px">
+                <a class="btn" href="{{ url_for('add_bill') }}">
+                    ＋ Add a bill
+                </a>
+            </div>
+        </section>
+        {% endif %}
+
+    </main>
+
 </div>
-{% endif %}
-</div>
-<p class="hint">OCR may misread details. Always verify the amount and date against your original bill.</p>
-</main></div></body></html>
+
+</body>
+</html>
+```
