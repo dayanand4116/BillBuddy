@@ -1,0 +1,61 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>BillBuddy - Smart Bill Manager</title>
+</head>
+<body>
+    <h1>BillBuddy</h1>
+    <p>Smart Bill &amp; Subscription Manager</p>
+
+    <p>Total bills amount: ₹{{ "%.2f"|format(total) }}</p>
+    <p>Pending amount: ₹{{ "%.2f"|format(pending) }}</p>
+    <p>Paid bills: {{ paid_count }}</p>
+    <p>Bills due in 7 days: {{ upcoming }}</p>
+
+    <p><a href="{{ url_for('add_bill') }}">Add a bill</a></p>
+    <p><a href="{{ url_for('subscriptions') }}">View subscriptions</a></p>
+    <p><a href="{{ url_for('ocr') }}">Scan a bill image</a></p>
+
+    {% with messages = get_flashed_messages(with_categories=true) %}
+      {% for category, message in messages %}
+        <p>{{ message }}</p>
+      {% endfor %}
+    {% endwith %}
+
+    <h2>Your bills</h2>
+    {% if bills %}
+      <table border="1" cellpadding="8">
+        <tr>
+          <th>Name</th>
+          <th>Category</th>
+          <th>Amount</th>
+          <th>Due date</th>
+          <th>Status</th>
+          <th>Actions</th>
+        </tr>
+        {% for bill in bills %}
+        <tr>
+          <td>{{ bill.title }}</td>
+          <td>{{ bill.category }}</td>
+          <td>₹{{ "%.2f"|format(bill.amount) }}</td>
+          <td>{{ bill.due_date }}</td>
+          <td>{{ bill.status }}</td>
+          <td>
+            <form method="post" action="{{ url_for('toggle_paid', bill_id=bill.id) }}">
+              <button type="submit">Toggle paid</button>
+            </form>
+            <form method="post" action="{{ url_for('delete_bill', bill_id=bill.id) }}">
+              <button type="submit">Delete</button>
+            </form>
+          </td>
+        </tr>
+        {% endfor %}
+      </table>
+    {% else %}
+      <p>No bills yet. Add your first bill.</p>
+    {% endif %}
+</body>
+</html>
