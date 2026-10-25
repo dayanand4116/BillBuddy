@@ -22,7 +22,7 @@ from google.genai import types
 from PIL import Image, ImageOps
 
 app = Flask(__name__)
-app.secret_key = os.environ.get("SECRET_KEY")
+app.secret_key = os.environ.get["SECRET_KEY"]
 
 DATABASE = "/tmp/billbuddy.db"
 UPLOAD_FOLDER = "/tmp/uploads"
