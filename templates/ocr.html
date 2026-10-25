@@ -298,285 +298,48 @@ h1 {
     margin: 0;
 }
 
-/* SCAN RESULTS */
-.result-panel {
-    margin-top: 26px;
-    padding: 26px;
-    border: 1px solid #ececf4;
-    border-radius: 18px;
-    background: white;
-    overflow-wrap: anywhere;
-    box-shadow: 0 5px 20px rgba(36, 36, 61, 0.025);
-}
-
-.result-title {
-    font-size: 19px;
-    font-weight: 800;
-    margin: 0 0 16px;
-}
-
-.result-content {
-    color: #555570;
-    font-size: 14px;
-    line-height: 1.9;
-    white-space: pre-wrap;
-    overflow-wrap: anywhere;
-}
-
-.error {
-    color: #c0394b;
-    background: #fff0f1;
-    border: 1px solid #ffdadd;
-    border-radius: 11px;
-    padding: 14px 16px;
-    font-size: 13px;
-    line-height: 1.7;
-    margin-bottom: 20px;
-}
-
-/* TABLET */
-@media (max-width: 1000px) {
-    .scan-features {
-        grid-template-columns: 1fr;
-    }
-
-    .feature-card {
-        padding: 22px;
-    }
-}
-
-/* MOBILE */
-@media (max-width: 750px) {
-    .layout {
-        display: block;
-    }
-
-    .sidebar {
-        width: 100%;
-        min-width: 0;
-        flex: none;
-        padding: 12px;
-    }
-
-    .brand {
-        padding: 5px 8px 12px;
-    }
-
-    .nav-label,
-    .bottom {
-        display: none;
-    }
-
-    .navs {
-        display: flex;
-        flex-direction: row;
-        gap: 4px;
-        overflow-x: auto;
-        padding-bottom: 3px;
-    }
-
-    .nav {
-        flex: 0 0 auto;
-        padding: 10px;
-        font-size: 11px;
-    }
-
-    .main {
-        width: 100%;
-        padding: 25px 16px;
-    }
-
-    h1 {
-        font-size: 28px;
-    }
-
-    .page-header {
-        margin-bottom: 24px;
-    }
-
-    .scan-panel {
-        padding: 20px;
-    }
-
-    .panel-title {
-        font-size: 19px;
-    }
-
-    .upload-area {
-        min-height: 280px;
-        padding: 28px 14px;
-    }
-
-    .upload-title {
-        font-size: 17px;
-    }
-
-    .file-input {
-        font-size: 12px;
-    }
-
-    .feature-card {
-        padding: 21px;
-    }
-
-    .result-panel {
-        padding: 20px;
-    }
-}
-
-@media (max-width: 380px) {
-    .nav {
-        padding: 9px 8px;
-        font-size: 10px;
-    }
-
-    .main {
-        padding: 22px 12px;
-    }
-
-    .scan-panel {
-        padding: 15px;
-    }
-}
-</style>
-</head>
-
-<body>
-<div class="layout">
-
-    <!-- LEFT SIDEBAR -->
-    <aside class="sidebar">
-        <div class="brand">Bill<span>Buddy.</span></div>
-
-        <div class="nav-label">WORKSPACE</div>
-
-        <nav class="navs">
-            <a class="nav" href="{{ url_for('dashboard') }}">
-                ▦ Dashboard
-            </a>
-
-            <a class="nav" href="{{ url_for('add_bill') }}">
-                ＋ Add a bill
-            </a>
-
-            <a class="nav active" href="{{ url_for('ocr') }}">
-                ▧ Scan a bill
-            </a>
-
-            <a class="nav" href="{{ url_for('subscriptions') }}">
-                ↻ Subscriptions
-            </a>
-        </nav>
-
-        <div class="bottom">
-            <b>Stay in control</b><br>
-            Keep track of your bills with ease.
-        </div>
-    </aside>
-
-    <!-- RIGHT CONTENT -->
-    <main class="main">
-
-        <header class="page-header">
-            <div class="eyebrow">SMART BILL SCANNER</div>
-            <h1>Scan a bill</h1>
-            <p class="subtitle">
-                Upload a bill image and extract its details to help manage your expenses.
-            </p>
-        </header>
-
-        <section class="scan-panel">
-            <h2 class="panel-title">Upload your bill</h2>
-
-            <p class="panel-description">
-                Select a clear image of your bill. Make sure the text and amount are readable.
-            </p>
-
-            {% if error %}
-            <div class="error">{{ error }}</div>
-            {% endif %}
-
-            <form method="POST"
-                  action="{{ url_for('ocr') }}"
-                  enctype="multipart/form-data">
-
-                <div class="upload-area">
-                    <div class="upload-icon">▧</div>
-
-                    <div class="upload-title">Choose a bill image</div>
-
-                    <div class="upload-help">
-                        Select an image from your device to scan.
-                    </div>
-
-                    <input
-                        class="file-input"
-                        type="file"
-                        name="file"
-                        accept="image/*"
-                        required
-                    >
-
-                    <button class="btn" type="submit">
-                        Scan bill
-                    </button>
-                </div>
-            </form>
-
-            <div class="notice">
-                <strong>Tip:</strong>
-                Use a clear, well-lit image with the bill total and date visible.
-                Check the extracted details before using them.
-            </div>
-        </section>
-
-        <!-- HOW IT WORKS -->
-        <section class="scan-features">
-            <article class="feature-card">
-                <div class="feature-icon">↥</div>
-                <h3>1. Upload your bill</h3>
-                <p>
-                    Select a clear image of your electricity, water, internet,
-                    or another bill.
-                </p>
-            </article>
-
-            <article class="feature-card">
-                <div class="feature-icon">⌕</div>
-                <h3>2. Scan the details</h3>
-                <p>
-                    Let the scanner process the uploaded image. Review the
-                    extracted information carefully for accuracy.
-                </p>
-            </article>
-
-            <article class="feature-card">
-                <div class="feature-icon">✓</div>
-                <h3>3. Track your expenses</h3>
-                <p>
-                    Use the Add a bill page to record your bill and keep its
-                    amount and due date organized.
-                </p>
-            </article>
-        </section>
 
         <!-- SCAN RESULT -->
         {% if result %}
         <section class="result-panel">
             <h2 class="result-title">Scan result</h2>
 
-            <div class="result-content">{{ result }}</div>
+            {% if result.filename %}
+            <p><strong>File:</strong> {{ result.filename }}</p>
+            {% endif %}
+
+            {% if result.error %}
+            <div class="error">
+                {{ result.error }}
+            </div>
+            {% endif %}
+
+            {% if result.text %}
+            <p><strong>Detected amount:</strong>
+                {{ result.amount if result.amount else "Not found" }}
+            </p>
+
+            <p><strong>Detected due date:</strong>
+                {{ result.due_date if result.due_date else "Not found" }}
+            </p>
+
+            <label for="extracted-text"><strong>Extracted text</strong></label>
+
+            <textarea
+                id="extracted-text"
+                rows="10"
+                readonly
+                style="width:100%; margin-top:10px; padding:14px;
+                       border:1px solid #e4e3ef; border-radius:10px;
+                       font-family:inherit; font-size:13px;
+                       line-height:1.7; resize:vertical;"
+            >{{ result.text }}</textarea>
 
             <div style="margin-top:20px">
                 <a class="btn" href="{{ url_for('add_bill') }}">
-                    ＋ Add a bill
+                    + Add a bill
                 </a>
             </div>
+            {% endif %}
         </section>
         {% endif %}
-
-    </main>
-</div>
-</body>
-</html>
-```
