@@ -1,0 +1,13 @@
+
+[project]
+name = "billbuddy"
+version = "1.0.0"
+requires-python = ">=3.12"
+dependencies = [
+    "Flask",
+    "google-genai",
+    "Pillow"
+]
+
+[tool.vercel]
+entrypoint = "app.py"
