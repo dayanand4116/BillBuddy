@@ -1,96 +1,541 @@
-
+```html
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>Add Bill | BillBuddy</title>
-    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
-    <style>
-        .bill-form {
-            max-width: 650px;
-            margin: 25px auto;
-            padding: 28px;
-            background: white;
-            border-radius: 14px;
-            box-shadow: 0 4px 20px #0f172a12;
-        }
-        .bill-form label {
-            display: block;
-            margin-top: 16px;
-            font-weight: 600;
-            color: #334155;
-        }
-        .bill-form input,
-        .bill-form select,
-        .bill-form textarea {
-            width: 100%;
-            padding: 12px;
-            margin-top: 6px;
-            border: 1px solid #cbd5e1;
-            border-radius: 8px;
-            font: inherit;
-        }
-        .bill-form button {
-            margin-top: 22px;
-            padding: 12px 20px;
-            background: #4338ca;
-        }
-    </style>
-</head>
-<body>
-    <h1>BillBuddy</h1>
-    <p>Add a new bill to track your expenses.</p>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Add a Bill | BillBuddy</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
 
-    <div class="bill-form">
-        <h2>Add New Bill</h2>
+<style>
+:root {
+    --purple: #7655ef;
+    --navy: #17172e;
+    --muted: #8589a3;
+    --bg: #f6f7fc;
+    --line: #ececf4;
+}
+* { box-sizing: border-box; }
+
+body {
+    margin: 0;
+    background: var(--bg);
+    font-family: Inter, Arial, sans-serif;
+    color: #24243d;
+    line-height: 1.5;
+}
+a { text-decoration: none; }
+
+.layout { display: flex; min-height: 100vh; }
+
+.sidebar {
+    width: 245px;
+    flex-shrink: 0;
+    background: var(--navy);
+    color: white;
+    padding: 28px 18px;
+    display: flex;
+    flex-direction: column;
+}
+.brand {
+    font-size: 25px;
+    font-weight: 800;
+    letter-spacing: -1px;
+    padding: 8px 12px 38px;
+}
+.brand span { color: #a998ff; }
+
+.nav-label {
+    font-size: 10px;
+    color: #8585a6;
+    font-weight: 800;
+    letter-spacing: 1.5px;
+    padding: 0 13px;
+    margin-bottom: 12px;
+}
+.nav-list { display: flex; flex-direction: column; }
+
+.nav {
+    display: flex;
+    align-items: center;
+    gap: 13px;
+    padding: 13px 14px;
+    margin: 4px 0;
+    border-radius: 12px;
+    color: #b6b6d0;
+    font-size: 13px;
+    font-weight: 600;
+    transition: .2s;
+}
+.nav:hover, .nav.active {
+    background: #302a54;
+    color: white;
+}
+.nav.active { box-shadow: inset 3px 0 #a998ff; }
+.nav-icon { font-size: 18px; width: 23px; text-align: center; }
+
+.sidebar-bottom {
+    margin-top: auto;
+    background: #242440;
+    padding: 17px;
+    border-radius: 14px;
+    font-size: 12px;
+    color: #c3c1df;
+}
+.sidebar-bottom strong {
+    display: block;
+    color: white;
+    margin-bottom: 5px;
+}
+
+.main {
+    flex: 1;
+    min-width: 0;
+    padding: 32px clamp(18px, 4vw, 48px);
+    max-width: 1600px;
+    margin: 0 auto;
+}
+
+.topbar {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 20px;
+    margin-bottom: 28px;
+}
+.eyebrow {
+    font-size: 11px;
+    color: var(--muted);
+    font-weight: 700;
+    letter-spacing: 1.5px;
+    text-transform: uppercase;
+}
+h1 {
+    font-size: 30px;
+    letter-spacing: -1.2px;
+    margin: 5px 0 7px;
+    font-weight: 800;
+    color: #24243d;
+}
+.subtitle { color: var(--muted); font-size: 13px; margin: 0; }
+
+.back-link {
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    padding: 10px 14px;
+    border: 1px solid var(--line);
+    background: white;
+    border-radius: 10px;
+    color: #5d5d78;
+    font-size: 12px;
+    font-weight: 700;
+    white-space: nowrap;
+}
+.back-link:hover {
+    color: var(--purple);
+    border-color: #c8bbff;
+}
+
+.form-layout {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 250px;
+    gap: 22px;
+    align-items: start;
+}
+
+.form-card, .info-card {
+    background: white;
+    border: 1px solid var(--line);
+    border-radius: 18px;
+    padding: 26px;
+    box-shadow: 0 5px 20px #24243d05;
+    min-width: 0;
+}
+.card-heading {
+    font-size: 17px;
+    font-weight: 800;
+    letter-spacing: -.4px;
+    margin: 0;
+}
+.card-description {
+    color: var(--muted);
+    font-size: 12px;
+    margin: 5px 0 23px;
+}
+.section-label {
+    font-size: 10px;
+    font-weight: 800;
+    color: #8d8da5;
+    letter-spacing: 1.3px;
+    text-transform: uppercase;
+    margin: 22px 0 12px;
+}
+.section-label:first-of-type { margin-top: 0; }
+
+.form-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 17px;
+}
+.field { min-width: 0; }
+.field.full { grid-column: 1 / -1; }
+
+label {
+    display: block;
+    margin-bottom: 7px;
+    font-size: 12px;
+    font-weight: 700;
+    color: #41415d;
+}
+.required { color: var(--purple); }
+
+input, select, textarea {
+    width: 100%;
+    display: block;
+    padding: 12px 13px;
+    border: 1px solid #e2e3ee;
+    border-radius: 10px;
+    background: #fdfdff;
+    color: #292944;
+    font-family: inherit;
+    font-size: 12px;
+    outline: none;
+    transition: border-color .2s, box-shadow .2s;
+}
+input, select { min-height: 44px; }
+textarea { resize: vertical; min-height: 95px; }
+
+input::placeholder, textarea::placeholder { color: #a3a5b8; }
+
+input:focus, select:focus, textarea:focus {
+    border-color: var(--purple);
+    box-shadow: 0 0 0 3px #7655ef18;
+    background: white;
+}
+
+.field-hint {
+    margin-top: 6px;
+    font-size: 10px;
+    color: var(--muted);
+}
+
+.form-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    margin-top: 25px;
+    padding-top: 21px;
+    border-top: 1px solid #f0f0f6;
+}
+
+.btn {
+    display: inline-flex;
+    justify-content: center;
+    align-items: center;
+    gap: 8px;
+    min-height: 43px;
+    padding: 12px 18px;
+    border-radius: 10px;
+    font-family: inherit;
+    font-size: 12px;
+    font-weight: 700;
+    cursor: pointer;
+    transition: .2s;
+}
+.btn-primary {
+    border: 0;
+    color: white;
+    background: var(--purple);
+    box-shadow: 0 7px 17px #7655ef30;
+}
+.btn-primary:hover {
+    background: #6040df;
+    transform: translateY(-1px);
+}
+.btn-secondary {
+    color: #62627d;
+    background: white;
+    border: 1px solid var(--line);
+}
+.btn-secondary:hover {
+    border-color: #c8bbff;
+    color: var(--purple);
+}
+
+.flash {
+    padding: 12px 15px;
+    background: #e5f8ef;
+    border-radius: 10px;
+    color: #12845d;
+    font-size: 12px;
+    margin-bottom: 15px;
+}
+.flash.error {
+    background: #fff0f1;
+    color: #c43f51;
+}
+
+.info-card { padding: 22px; }
+.info-icon {
+    width: 45px;
+    height: 45px;
+    display: grid;
+    place-items: center;
+    border-radius: 13px;
+    background: #f0edff;
+    color: var(--purple);
+    font-size: 22px;
+    margin-bottom: 16px;
+}
+.info-title {
+    font-size: 14px;
+    font-weight: 800;
+    margin: 0 0 7px;
+}
+.info-text {
+    color: var(--muted);
+    font-size: 11px;
+    margin: 0;
+}
+.tip-list {
+    list-style: none;
+    padding: 0;
+    margin: 20px 0 0;
+}
+.tip-list li {
+    display: flex;
+    align-items: flex-start;
+    gap: 9px;
+    padding: 12px 0;
+    border-top: 1px solid #f0f0f6;
+    font-size: 11px;
+    color: #62627d;
+}
+.tip-check { color: #139b70; font-weight: 800; }
+
+.footer {
+    padding: 22px 0;
+    color: #a0a1b3;
+    font-size: 10px;
+    text-align: center;
+}
+
+@media (max-width: 1000px) {
+    .form-layout { grid-template-columns: minmax(0, 1fr); }
+    .info-card { display: none; }
+}
+@media (max-width: 700px) {
+    .layout { display: block; }
+    .sidebar {
+        width: 100%;
+        padding: 13px;
+        display: block;
+    }
+    .brand { padding: 5px 8px 13px; }
+    .nav-label, .sidebar-bottom { display: none; }
+    .nav-list {
+        display: flex;
+        flex-direction: row;
+        gap: 5px;
+        overflow-x: auto;
+    }
+    .nav { white-space: nowrap; padding: 10px; font-size: 11px; }
+    .main { padding: 24px 14px; }
+    .topbar {
+        align-items: flex-start;
+        flex-direction: column;
+        margin-bottom: 22px;
+    }
+    h1 { font-size: 26px; }
+    .form-card { padding: 19px; }
+}
+@media (max-width: 420px) {
+    .form-grid { grid-template-columns: minmax(0, 1fr); }
+    .field.full { grid-column: auto; }
+    .form-actions { flex-direction: column; }
+    .btn { width: 100%; }
+}
+</style>
+</head>
+
+<body>
+<div class="layout">
+
+    <aside class="sidebar">
+        <div class="brand">Bill<span>Buddy.</span></div>
+        <div class="nav-label">WORKSPACE</div>
+
+        <nav class="nav-list">
+            <a class="nav" href="{{ url_for('dashboard') }}">
+                <span class="nav-icon">▦</span> Dashboard
+            </a>
+            <a class="nav active" href="{{ url_for('add_bill') }}">
+                <span class="nav-icon">＋</span> Add a bill
+            </a>
+            <a class="nav" href="{{ url_for('ocr') }}">
+                <span class="nav-icon">▧</span> Scan a bill
+            </a>
+            <a class="nav" href="{{ url_for('subscriptions') }}">
+                <span class="nav-icon">↻</span> Subscriptions
+            </a>
+        </nav>
+
+        <div class="sidebar-bottom">
+            <strong>✦ Stay on top of bills</strong>
+            Track payments, spot upcoming due dates and keep your expenses organized.
+        </div>
+    </aside>
+
+    <main class="main">
+
+        <header class="topbar">
+            <div>
+                <div class="eyebrow">BILL MANAGEMENT</div>
+                <h1>Add a new bill</h1>
+                <p class="subtitle">Enter your bill details to keep your payments organized.</p>
+            </div>
+
+            <a class="back-link" href="{{ url_for('dashboard') }}">
+                ← Back to dashboard
+            </a>
+        </header>
 
         {% with messages = get_flashed_messages(with_categories=true) %}
-          {% for category, message in messages %}
-            <p>{{ message }}</p>
-          {% endfor %}
+            {% for category, message in messages %}
+                <div class="flash {{ 'error' if category == 'error' else '' }}">
+                    {{ message }}
+                </div>
+            {% endfor %}
         {% endwith %}
 
-        <form method="post" action="{{ url_for('add_bill') }}">
-            <label for="title">Bill name</label>
-            <input id="title" name="title" type="text"
-                   placeholder="e.g. Electricity Bill" required>
+        <div class="form-layout">
 
-            <label for="category">Category</label>
-            <select id="category" name="category" required>
-                <option value="Electricity">Electricity</option>
-                <option value="Water">Water</option>
-                <option value="Internet">Internet</option>
-                <option value="Mobile">Mobile</option>
-                <option value="Rent">Rent</option>
-                <option value="Vehicle">Vehicle</option>
-                <option value="Insurance">Insurance</option>
-                <option value="Subscription">Subscription</option>
-                <option value="Other" selected>Other</option>
-            </select>
+            <section class="form-card">
+                <h2 class="card-heading">Bill details</h2>
+                <p class="card-description">
+                    Fill in the information below. Fields marked with * are required.
+                </p>
 
-            <label for="amount">Amount (₹)</label>
-            <input id="amount" name="amount" type="number"
-                   min="0" step="0.01" placeholder="e.g. 1200" required>
+                <form method="post" action="{{ url_for('add_bill') }}">
 
-            <label for="due_date">Due date</label>
-            <input id="due_date" name="due_date" type="date"
-                   value="{{ today }}" required>
+                    <div class="section-label">Basic information</div>
 
-            <label for="recurring">Recurring bill?</label>
-            <select id="recurring" name="recurring">
-                <option value="No" selected>No</option>
-                <option value="Yes">Yes</option>
-            </select>
+                    <div class="form-grid">
 
-            <label for="notes">Notes (optional)</label>
-            <textarea id="notes" name="notes" rows="3"
-                      placeholder="Add any details"></textarea>
+                        <div class="field full">
+                            <label for="title">Bill name <span class="required">*</span></label>
+                            <input
+                                id="title"
+                                name="title"
+                                type="text"
+                                placeholder="e.g. Electricity Bill"
+                                maxlength="120"
+                                required
+                            >
+                        </div>
 
-            <button type="submit">Save Bill</button>
-        </form>
+                        <div class="field">
+                            <label for="category">Category <span class="required">*</span></label>
+                            <select id="category" name="category" required>
+                                <option value="Electricity">Electricity</option>
+                                <option value="Water">Water</option>
+                                <option value="Internet">Internet</option>
+                                <option value="Mobile">Mobile</option>
+                                <option value="Rent">Rent</option>
+                                <option value="Vehicle">Vehicle</option>
+                                <option value="Insurance">Insurance</option>
+                                <option value="Subscription">Subscription</option>
+                                <option value="Other" selected>Other</option>
+                            </select>
+                        </div>
 
-        <p><a href="{{ url_for('dashboard') }}">← Back to Dashboard</a></p>
-    </div>
+                        <div class="field">
+                            <label for="amount">Amount (₹) <span class="required">*</span></label>
+                            <input
+                                id="amount"
+                                name="amount"
+                                type="number"
+                                min="0.01"
+                                step="0.01"
+                                placeholder="e.g. 1200.00"
+                                required
+                            >
+                        </div>
+
+                        <div class="field">
+                            <label for="due_date">Due date <span class="required">*</span></label>
+                            <input
+                                id="due_date"
+                                name="due_date"
+                                type="date"
+                                value="{{ today }}"
+                                required
+                            >
+                        </div>
+
+                        <div class="field">
+                            <label for="recurring">Recurring bill?</label>
+                            <select id="recurring" name="recurring">
+                                <option value="No" selected>No — one-time bill</option>
+                                <option value="Yes">Yes — repeats regularly</option>
+                            </select>
+                        </div>
+
+                    </div>
+
+                    <div class="section-label">Additional information</div>
+
+                    <div class="form-grid">
+                        <div class="field full">
+                            <label for="notes">Notes <span style="font-weight:400;color:#8589a3;">(optional)</span></label>
+                            <textarea
+                                id="notes"
+                                name="notes"
+                                rows="3"
+                                maxlength="1000"
+                                placeholder="Add a reference number, payment details, or a reminder..."
+                            ></textarea>
+                            <div class="field-hint">Add any extra details you may need later.</div>
+                        </div>
+                    </div>
+
+                    <div class="form-actions">
+                        <button class="btn btn-primary" type="submit">
+                            ✓ Save bill
+                        </button>
+                        <a class="btn btn-secondary" href="{{ url_for('dashboard') }}">
+                            Cancel
+                        </a>
+                    </div>
+
+                </form>
+            </section>
+
+            <aside class="info-card">
+                <div class="info-icon">✦</div>
+                <h3 class="info-title">Stay organized</h3>
+                <p class="info-text">
+                    Keep your bills in one place so it's easier to track payments and upcoming due dates.
+                </p>
+
+                <ul class="tip-list">
+                    <li><span class="tip-check">✓</span><span>Enter the correct due date to track upcoming payments.</span></li>
+                    <li><span class="tip-check">✓</span><span>Choose a category to keep your bills organized.</span></li>
+                    <li><span class="tip-check">✓</span><span>Mark regular payments as recurring.</span></li>
+                </ul>
+            </aside>
+
+        </div>
+
+        <footer class="footer">
+            BILLBUDDY · YOUR BILLS, UNDER CONTROL
+        </footer>
+
+    </main>
+</div>
 </body>
 </html>
+```
