@@ -6,9 +6,8 @@ import re
 import sqlite3
 import mimetypes
 from functools import wraps
-from datetime import datetime
+from datetime import datetime, date, timedelta
 from math import isfinite
-from pathlib import Path
 
 from flask import (
     Flask, render_template, request, redirect, url_for,
@@ -22,13 +21,16 @@ from google.genai import types
 from PIL import Image, ImageOps
 
 app = Flask(__name__)
-app.secret_key = os.environ.get("SECRET_KEY")
+app.secret_key = os.environ.get("SECRET_KEY") or os.urandom(32).hex()
+
 DATABASE = "/tmp/billbuddy.db"
 UPLOAD_FOLDER = "/tmp/uploads"
 ALLOWED_EXTENSIONS = {"png", "jpg", "jpeg", "webp"}
 
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 
+
+# ---------------- DATABASE ----------------
 
 def get_db():
     if "db" not in g:
@@ -64,6 +66,9 @@ def init_db():
             amount REAL DEFAULT 0,
             due_date TEXT DEFAULT '',
             notes TEXT DEFAULT '',
+            category TEXT DEFAULT 'Other',
+            status TEXT DEFAULT 'Pending',
+            recurring TEXT DEFAULT 'No',
             created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
             FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
         );
@@ -79,12 +84,46 @@ def init_db():
         );
     """)
 
+    # Add columns to an existing database without deleting user data.
+    columns = {
+        row[1]
+        for row in db.execute("PRAGMA table_info(bills)").fetchall()
+    }
+
+    migrations = {
+        "category": "ALTER TABLE bills ADD COLUMN category TEXT DEFAULT 'Other'",
+        "status": "ALTER TABLE bills ADD COLUMN status TEXT DEFAULT 'Pending'",
+        "recurring": "ALTER TABLE bills ADD COLUMN recurring TEXT DEFAULT 'No'",
+    }
+
+    for column, statement in migrations.items():
+        if column not in columns:
+            db.execute(statement)
+
+    db.execute("""
+        UPDATE bills
+        SET category = 'Other'
+        WHERE category IS NULL OR category = ''
+    """)
+    db.execute("""
+        UPDATE bills
+        SET status = 'Pending'
+        WHERE status IS NULL OR status = ''
+    """)
+    db.execute("""
+        UPDATE bills
+        SET recurring = 'No'
+        WHERE recurring IS NULL OR recurring = ''
+    """)
+
     db.commit()
     db.close()
 
 
 init_db()
 
+
+# ---------------- AUTHENTICATION ----------------
 
 def login_required(view):
     @wraps(view)
@@ -118,17 +157,21 @@ def register():
             return render_template("register.html")
 
         db = get_db()
+
         try:
             cursor = db.execute(
                 "INSERT INTO users (username, password_hash) VALUES (?, ?)",
                 (username, generate_password_hash(password))
             )
             db.commit()
+
             session.clear()
             session["user_id"] = cursor.lastrowid
             session["username"] = username
+
             flash("Account created successfully.", "success")
             return redirect(url_for("dashboard"))
+
         except sqlite3.IntegrityError:
             flash("That username is already taken.", "error")
 
@@ -142,7 +185,11 @@ def login():
         password = request.form.get("password", "")
 
         user = get_db().execute(
-            "SELECT id, username, password_hash FROM users WHERE username = ?",
+            """
+            SELECT id, username, password_hash
+            FROM users
+            WHERE username = ?
+            """,
             (username,)
         ).fetchone()
 
@@ -165,6 +212,8 @@ def logout():
     return redirect(url_for("login"))
 
 
+# ---------------- DASHBOARD ----------------
+
 @app.route("/dashboard")
 @login_required
 def dashboard():
@@ -172,29 +221,69 @@ def dashboard():
     user_id = session["user_id"]
 
     bills = db.execute(
-        "SELECT * FROM bills WHERE user_id = ? ORDER BY id DESC",
+        """
+        SELECT *
+        FROM bills
+        WHERE user_id = ?
+        ORDER BY id DESC
+        """,
         (user_id,)
     ).fetchall()
 
     subscriptions = db.execute(
-        "SELECT * FROM subscriptions WHERE user_id = ? ORDER BY id DESC",
+        """
+        SELECT *
+        FROM subscriptions
+        WHERE user_id = ?
+        ORDER BY id DESC
+        """,
         (user_id,)
     ).fetchall()
 
-    total_bills = sum(float(b["amount"] or 0) for b in bills)
-    total_subscriptions = sum(
-        float(s["amount"] or 0) for s in subscriptions
+    total = sum(float(b["amount"] or 0) for b in bills)
+
+    pending = sum(
+        float(b["amount"] or 0)
+        for b in bills
+        if (b["status"] or "Pending") != "Paid"
     )
+
+    paid_count = sum(
+        1 for b in bills if (b["status"] or "Pending") == "Paid"
+    )
+
+    today = date.today()
+    next_week = today + timedelta(days=7)
+    upcoming = 0
+
+    for bill in bills:
+        if (bill["status"] or "Pending") == "Paid":
+            continue
+
+        due_date = (bill["due_date"] or "").strip()
+        if not due_date:
+            continue
+
+        try:
+            due = date.fromisoformat(due_date)
+            if today <= due <= next_week:
+                upcoming += 1
+        except ValueError:
+            continue
 
     return render_template(
         "index.html",
         bills=bills,
         subscriptions=subscriptions,
-        total_bills=total_bills,
-        total_subscriptions=total_subscriptions,
+        total=total,
+        pending=pending,
+        paid_count=paid_count,
+        upcoming=upcoming,
         username=session.get("username")
     )
 
+
+# ---------------- ADD BILL ----------------
 
 @app.route("/add", methods=["GET", "POST"])
 @login_required
@@ -204,10 +293,15 @@ def add_bill():
         amount_text = request.form.get("amount", "0").strip()
         due_date = request.form.get("due_date", "").strip()
         notes = request.form.get("notes", "").strip()
+        category = request.form.get("category", "Other").strip() or "Other"
+        recurring = request.form.get("recurring", "No").strip()
 
         if not title:
             flash("Please enter a bill title.", "error")
             return render_template("add.html")
+
+        if recurring not in {"Yes", "No"}:
+            recurring = "No"
 
         try:
             amount = float(amount_text or 0)
@@ -217,17 +311,64 @@ def add_bill():
             flash("Enter a valid non-negative amount.", "error")
             return render_template("add.html")
 
-        get_db().execute(
-            """INSERT INTO bills (user_id, title, amount, due_date, notes)
-               VALUES (?, ?, ?, ?, ?)""",
-            (session["user_id"], title, amount, due_date, notes)
+        if due_date:
+            try:
+                date.fromisoformat(due_date)
+            except ValueError:
+                flash("Enter a valid due date.", "error")
+                return render_template("add.html")
+
+        db = get_db()
+        db.execute(
+            """
+            INSERT INTO bills
+                (user_id, title, amount, due_date, notes,
+                 category, status, recurring)
+            VALUES (?, ?, ?, ?, ?, ?, 'Pending', ?)
+            """,
+            (
+                session["user_id"], title, amount, due_date,
+                notes, category, recurring
+            )
         )
-        get_db().commit()
-        flash("Bill added.", "success")
+        db.commit()
+
+        flash("Bill added successfully.", "success")
         return redirect(url_for("dashboard"))
 
     return render_template("add.html")
 
+
+# ---------------- MARK PAID / UNDO ----------------
+
+@app.route("/toggle-paid/<int:bill_id>", methods=["POST"])
+@login_required
+def toggle_paid(bill_id):
+    db = get_db()
+    user_id = session["user_id"]
+
+    bill = db.execute(
+        "SELECT id, status FROM bills WHERE id = ? AND user_id = ?",
+        (bill_id, user_id)
+    ).fetchone()
+
+    if bill is None:
+        flash("Bill not found.", "error")
+        return redirect(url_for("dashboard"))
+
+    new_status = "Pending" if bill["status"] == "Paid" else "Paid"
+
+    db.execute(
+        "UPDATE bills SET status = ? WHERE id = ? AND user_id = ?",
+        (new_status, bill_id, user_id)
+    )
+    db.commit()
+
+    flash("Bill status updated to " + new_status + ".", "success")
+    return redirect(url_for("dashboard"))
+
+
+# ---------------- DELETE BILL ----------------
 
 @app.route("/delete-bill/<int:bill_id>", methods=["POST"])
 @login_required
@@ -238,9 +379,12 @@ def delete_bill(bill_id):
         (bill_id, session["user_id"])
     )
     db.commit()
+
     flash("Bill deleted if it belonged to your account.", "success")
     return redirect(url_for("dashboard"))
 
+
+# ---------------- SUBSCRIPTIONS ----------------
 
 @app.route("/subscriptions", methods=["GET", "POST"])
 @login_required
@@ -269,18 +413,33 @@ def subscriptions_page():
             flash("Enter a valid non-negative amount.", "error")
             return redirect(url_for("subscriptions_page"))
 
+        if next_due_date:
+            try:
+                date.fromisoformat(next_due_date)
+            except ValueError:
+                flash("Enter a valid subscription due date.", "error")
+                return redirect(url_for("subscriptions_page"))
+
         db.execute(
-            """INSERT INTO subscriptions
-               (user_id, name, amount, billing_cycle, next_due_date)
-               VALUES (?, ?, ?, ?, ?)""",
+            """
+            INSERT INTO subscriptions
+                (user_id, name, amount, billing_cycle, next_due_date)
+            VALUES (?, ?, ?, ?, ?)
+            """,
             (user_id, name, amount, billing_cycle, next_due_date)
         )
         db.commit()
-        flash("Subscription added.", "success")
+
+        flash("Subscription added successfully.", "success")
         return redirect(url_for("subscriptions_page"))
 
     items = db.execute(
-        "SELECT * FROM subscriptions WHERE user_id = ? ORDER BY id DESC",
+        """
+        SELECT *
+        FROM subscriptions
+        WHERE user_id = ?
+        ORDER BY id DESC
+        """,
         (user_id,)
     ).fetchall()
 
@@ -292,24 +451,38 @@ def subscriptions_page():
 def delete_subscription(subscription_id):
     db = get_db()
     db.execute(
-        "DELETE FROM subscriptions WHERE id = ? AND user_id = ?",
+        """
+        DELETE FROM subscriptions
+        WHERE id = ? AND user_id = ?
+        """,
         (subscription_id, session["user_id"])
     )
     db.commit()
+
     flash("Subscription deleted if it belonged to your account.", "success")
     return redirect(url_for("subscriptions_page"))
 
 
+# ---------------- BILL IMAGE SCANNING ----------------
+
 def extract_bill_text(path):
-    result = {"text": "", "amount": "", "due_date": "", "error": ""}
+    result = {
+        "text": "",
+        "amount": "",
+        "due_date": "",
+        "error": ""
+    }
 
     api_key = os.environ.get("GEMINI_API_KEY")
     if not api_key:
-        result["error"] = "GEMINI_API_KEY is missing from environment variables."
+        result["error"] = (
+            "GEMINI_API_KEY is missing from environment variables."
+        )
         return result
 
     try:
         mime_type, _ = mimetypes.guess_type(path)
+
         if mime_type not in {"image/png", "image/jpeg", "image/webp"}:
             result["error"] = "Upload a PNG, JPG, JPEG or WEBP image."
             return result
@@ -318,6 +491,7 @@ def extract_bill_text(path):
             image = ImageOps.exif_transpose(original)
             image.load()
             image.thumbnail((1800, 1800), Image.Resampling.LANCZOS)
+
             if image.mode != "RGB":
                 image = image.convert("RGB")
 
@@ -339,7 +513,7 @@ Do not invent missing information. Return JSON only, without Markdown.
 """
 
         response = client.models.generate_content(
-            model="gemini-3.8-flash",
+            model=os.environ.get("GEMINI_MODEL", "gemini-2.5-flash"),
             contents=[
                 prompt,
                 types.Part.from_bytes(
@@ -357,6 +531,7 @@ Do not invent missing information. Return JSON only, without Markdown.
             raise ValueError("Gemini returned an empty response.")
 
         data = json.loads(response.text)
+
         text = str(data.get("text") or "").strip()[:4000]
         amount_raw = str(data.get("amount") or "").strip()
         date_raw = str(data.get("due_date") or "").strip()
@@ -365,6 +540,7 @@ Do not invent missing information. Return JSON only, without Markdown.
         if amount_raw:
             cleaned = re.sub(r"[₹,\s]", "", amount_raw)
             cleaned = re.sub(r"^(?:INR|Rs\.?)", "", cleaned, flags=re.I)
+
             try:
                 value = float(cleaned)
                 if isfinite(value) and value >= 0:
@@ -382,21 +558,32 @@ Do not invent missing information. Return JSON only, without Markdown.
                 pass
 
         result.update(text=text, amount=amount, due_date=due_date)
+
         if not text:
-            result["error"] = "No readable text detected. Try a clearer image."
+            result["error"] = (
+                "No readable text detected. Try a clearer image."
+            )
 
         return result
 
     except Exception:
         app.logger.exception("Gemini bill scanning failed")
-        result["error"] = "Bill scanning failed. Check your Gemini API access and Vercel logs."
+        result["error"] = (
+            "Bill scanning failed. Check your Gemini API key, model access "
+            "and Vercel function logs."
+        )
         return result
 
 
 @app.route("/ocr", methods=["GET", "POST"])
 @login_required
 def ocr():
-    result = {"text": "", "amount": "", "due_date": "", "error": ""}
+    result = {
+        "text": "",
+        "amount": "",
+        "due_date": "",
+        "error": ""
+    }
 
     if request.method == "POST":
         upload = request.files.get("file")
@@ -406,25 +593,31 @@ def ocr():
             return render_template("ocr.html", result=result)
 
         filename = secure_filename(upload.filename)
-        extension = filename.rsplit(".", 1)[-1].lower() if "." in filename else ""
+        extension = (
+            filename.rsplit(".", 1)[-1].lower()
+            if "." in filename else ""
+        )
 
         if extension not in ALLOWED_EXTENSIONS:
             result["error"] = "Upload a PNG, JPG, JPEG or WEBP image."
             return render_template("ocr.html", result=result)
 
         path = os.path.join(UPLOAD_FOLDER, filename)
-        upload.save(path)
 
         try:
+            upload.save(path)
             result = extract_bill_text(path)
         finally:
             try:
-                os.remove(path)
+                if os.path.exists(path):
+                    os.remove(path)
             except OSError:
-                pass
+                app.logger.warning("Could not remove temporary upload.")
 
     return render_template("ocr.html", result=result)
 
+
+# ---------------- LOCAL DEVELOPMENT ----------------
 
 if __name__ == "__main__":
     app.run(debug=True)
