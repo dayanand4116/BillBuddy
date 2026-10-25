@@ -13,9 +13,8 @@ app = Flask(__name__)
 app.secret_key = "change-this-secret-key"
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 DB_PATH = os.path.join(BASE_DIR, "billbuddy.db")
-UPLOAD_DIR = os.path.join(BASE_DIR, "uploads")
-os.makedirs(UPLOAD_DIR, exist_ok=True)
-ALLOWED_EXTENSIONS = {"png", "jpg", "jpeg", "webp"}
+UPLOAD_DIR = "/tmp/uploads"
+os.makedirs(UPLOAD_DIR, exist_ok=True)ALLOWED_EXTENSIONS = {"png", "jpg", "jpeg", "webp"}
 
 def get_db():
     conn = sqlite3.connect(DB_PATH)
